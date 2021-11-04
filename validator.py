@@ -1,62 +1,56 @@
 import os
+
 import geopandas as gpd
-import pandas as pd
 
-def shapefile_validator():
+
+def make_output_folders(path):  # Create function to create output folders
+    # make folder using path
     """
-    Validates the shapefiles according to its geometries, attributes, and projections.
+    Create output folder.
     """
+    try:
+        os.makedirs(output_path, exist_ok=True)
+    except Exception as e:
+        print(e)
 
-    # Initialize empty dataframes
-    geom_check = []
-    attribute_check = []
-    prj_check = []
 
+def post_processor(output_path):
+    """
+    Performs dissolving of the hazard shapefiles.
+    """
     # Observed variants of hazard attributes
-    haz_cols = ['Var', 'VAR', 'SS', 'GRIDCODE', 'LH']
+    haz_cols = ["Var", "VAR", "SS", "GRIDCODE", "LH"]
 
-    for shp in shp_files:
-        # Gets the geometry of the shapefiles
-        geometry = gpd.read_file(shp).geometry
+    for file in shp_files:
+        # Gets only the name of the shapefile, will be used as the new filename
+        hazard_name = file.replace(".shp", "")
 
-        # Reads the shapefiles
-        data = gpd.read_file(shp)
+        # Reads the file and dissolves it by hazard attributes
+        full_file_path = os.path.join(input_path, file)
+        read_haz = gpd.read_file(full_file_path)
 
-        # Checks if the shapefile contains a haz col given the different observed variants of haz columns
         for haz in haz_cols:
-            if haz in data:
-                attribute_check.append(True)
+            if haz in read_haz:
+                read_haz = read_haz.dissolve(by=haz)
                 break
         else:
-            attribute_check.append(False)
-        
-        # Checks if shapefile has GCS projection (Correct = epsg:4326)
-        prj = gpd.read_file(shp).crs
-        if prj == 'epsg:4326':
-            prj_check.append(True)
-        else:
-            prj_check.append(False)
-        
-        # Checks if the shapefile has empty geometries
-        geom_series = gpd.GeoSeries(geometry)
-        if geom_series.shape[0] > 0:
-            geom_check.append(True)
-        else:
-            geom_check.append(False)
+            continue
 
-    validator = pd.DataFrame(data=zip(hazard_name, geom_check, attribute_check, prj_check),columns=['hazard name', 'contains geometry', 'correct attribute', 'GCS prj'])
-    validator.to_csv('results_validation.csv', index=None, encoding="utf-8")
-    print(validator)
+        # Saves the dissolved file to a new file inside the output folder
+        read_haz.to_file(
+            os.path.abspath(os.path.join(output_path, hazard_name + "_diss.shp"))
+        )
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Path to directories
-    path_to_dir = os.path.dirname(os.path.abspath('__file__'))
-    input_files = os.listdir(path_to_dir)
+    path_to_dir = os.path.dirname(os.path.abspath("__file__"))
+    input_path = os.path.join(path_to_dir, "input")
+    output_path = os.path.join(path_to_dir, "output")
+    make_output_folders(output_path)
+    input_files = os.listdir(input_path)
 
     # Gets only the .shp
-    shp_files = [ file for file in input_files if file.endswith(".shp") ]
+    shp_files = [file for file in input_files if file.endswith(".shp")]
 
-    # Extracts the hazard name (from the filename)
-    hazard_name = [ shp.replace(".shp", "") for shp in shp_files ]
-
-    shapefile_validator()
+    # Runs the post processor function
+    post_processor(output_path)
